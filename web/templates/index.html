@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>戏梦调剂定制班 - 智能调剂规划生成</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      fontFamily: { sans: ['"Noto Sans SC"', 'sans-serif'] },
+      colors: {
+        brand: {
+          50: '#eef2ff', 100: '#e0e7ff', 200: '#c7d2fe', 300: '#a5b4fc',
+          400: '#818cf8', 500: '#6366f1', 600: '#4f46e5', 700: '#4338ca',
+          800: '#3730a3', 900: '#312e81',
+        }
+      }
+    }
+  }
+}
+</script>
+<style>
+  * { font-family: 'Noto Sans SC', sans-serif; }
+  
+  /* 自定义滚动条 */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 3px; }
+  ::-webkit-scrollbar-thumb { background: #c7d2fe; border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: #a5b4fc; }
+  
+  /* 文件拖拽区域 */
+  .drop-zone { transition: all 0.3s ease; }
+  .drop-zone.dragover { 
+    border-color: #6366f1 !important; 
+    background-color: #eef2ff !important;
+    transform: scale(1.01);
+  }
+  
+  /* 步骤指示器动画 */
+  .step-line { transition: background-color 0.5s ease; }
+  
+  /* 进度条动画 */
+  .progress-bar {
+    transition: width 0.4s ease;
+    background: linear-gradient(90deg, #6366f1, #818cf8, #6366f1);
+    background-size: 200% 100%;
+    animation: shimmer 2s infinite;
+  }
+  @keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+  
+  /* 卡片悬浮效果 */
+  .student-card {
+    transition: all 0.2s ease;
+  }
+  .student-card:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.1);
+  }
+  .student-card.selected {
+    border-color: #6366f1;
+    background-color: #eef2ff;
+  }
+  
+  /* 淡入动画 */
+  @keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .fade-in { animation: fadeInUp 0.4s ease forwards; }
+  
+  /* Toast 通知 */
+  .toast {
+    animation: slideIn 0.3s ease, fadeOut 0.3s ease 3.7s forwards;
+  }
+  @keyframes slideIn {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+  }
+  @keyframes fadeOut {
+    to { opacity: 0; transform: translateX(100%); }
+  }
+  
+  /* 结果卡片 */
+  .result-item { animation: fadeInUp 0.3s ease forwards; }
+  
+  /* 脉冲动画 */
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+  .pulse-dot { animation: pulse-dot 1.5s infinite; }
+
+  /* checkbox 美化 */
+  input[type="checkbox"] {
+    accent-color: #6366f1;
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+  }
+</style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+<!-- ═══════ Toast 容器 ═══════ -->
+<div id="toast-container" class="fixed top-4 right-4 z-50 flex flex-col gap-2"></div>
+
+<!-- ═══════ 顶部导航 ═══════ -->
+<header class="bg-white border-b border-slate-200 sticky top-0 z-40">
+  <div class="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <div class="w-9 h-9 rounded-lg bg-gradient-to-br from-brand-500 to-brand-700 flex items-center justify-center">
+        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+        </svg>
+      </div>
+      <div>
+        <h1 class="text-lg font-semibold text-slate-800 leading-tight">戏梦调剂定制班</h1>
+        <p class="text-xs text-slate-400">智能调剂规划生成系统</p>
+      </div>
+    </div>
+    <div id="connection-status" class="flex items-center gap-2 text-xs text-slate-400">
+      <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+      已连接
+    </div>
+  </div>
+</header>
+
+<!-- ═══════ 主体内容 ═══════ -->
+<main class="max-w-6xl mx-auto px-6 py-8">
+
+  <!-- 步骤指示器 -->
+  <div class="flex items-center justify-center mb-10">
+    <div class="flex items-center gap-0">
+      <!-- Step 1 -->
+      <div class="flex items-center gap-2">
+        <div id="step-badge-1" class="w-8 h-8 rounded-full bg-brand-600 text-white flex items-center justify-center text-sm font-semibold ring-4 ring-brand-100">1</div>
+        <span id="step-text-1" class="text-sm font-medium text-brand-700">上传文件</span>
+      </div>
+      <div id="step-line-1" class="w-16 h-0.5 bg-slate-200 mx-3 step-line"></div>
+      <!-- Step 2 -->
+      <div class="flex items-center gap-2">
+        <div id="step-badge-2" class="w-8 h-8 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center text-sm font-semibold">2</div>
+        <span id="step-text-2" class="text-sm font-medium text-slate-400">选择考生</span>
+      </div>
+      <div id="step-line-2" class="w-16 h-0.5 bg-slate-200 mx-3 step-line"></div>
+      <!-- Step 3 -->
+      <div class="flex items-center gap-2">
+        <div id="step-badge-3" class="w-8 h-8 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center text-sm font-semibold">3</div>
+        <span id="step-text-3" class="text-sm font-medium text-slate-400">生成报告</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════ Step 1: 上传文件 ═══════ -->
+  <section id="section-upload" class="fade-in">
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-8">
+      <div class="text-center mb-8">
+        <h2 class="text-xl font-semibold text-slate-800 mb-2">上传数据文件</h2>
+        <p class="text-sm text-slate-500">上传最新的调剂意向统计表，系统将自动解析考生信息</p>
+      </div>
+
+      <div class="grid md:grid-cols-2 gap-6">
+        <!-- 统计表上传（必须） -->
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-2">
+            <span class="text-red-500">*</span> 调剂意向统计表
+          </label>
+          <div id="drop-stats" class="drop-zone border-2 border-dashed border-slate-300 rounded-xl p-8 text-center cursor-pointer bg-slate-50 hover:bg-brand-50 hover:border-brand-300"
+               onclick="document.getElementById('input-stats').click()">
+            <input type="file" id="input-stats" accept=".xlsx,.xls" class="hidden" onchange="onFileSelected('stats', this)">
+            <div id="stats-placeholder">
+              <svg class="w-10 h-10 mx-auto text-slate-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+              </svg>
+              <p class="text-sm text-slate-500 mb-1">点击或拖拽上传 统计表.xlsx</p>
+              <p class="text-xs text-slate-400">从问卷系统导出的最新数据</p>
+            </div>
+            <div id="stats-selected" class="hidden">
+              <svg class="w-10 h-10 mx-auto text-emerald-500 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+              </svg>
+              <p id="stats-filename" class="text-sm font-medium text-emerald-700"></p>
+              <p class="text-xs text-slate-400 mt-1">点击重新选择</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- 模板文件上传（可选） -->
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-2">
+            评估表模板
+            <span class="text-slate-400 font-normal ml-1">（可选，不传则使用默认模板）</span>
+          </label>
+          <div id="drop-template" class="drop-zone border-2 border-dashed border-slate-300 rounded-xl p-8 text-center cursor-pointer bg-slate-50 hover:bg-brand-50 hover:border-brand-300"
+               onclick="document.getElementById('input-template').click()">
+            <input type="file" id="input-template" accept=".xlsx,.xls" class="hidden" onchange="onFileSelected('template', this)">
+            <div id="template-placeholder">
+              <svg class="w-10 h-10 mx-auto text-slate-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
+              </svg>
+              <p class="text-sm text-slate-500 mb-1">点击或拖拽上传 模板.xlsx</p>
+              <p class="text-xs text-slate-400">将使用项目内置默认模板</p>
+            </div>
+            <div id="template-selected" class="hidden">
+              <svg class="w-10 h-10 mx-auto text-emerald-500 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+              </svg>
+              <p id="template-filename" class="text-sm font-medium text-emerald-700"></p>
+              <p class="text-xs text-slate-400 mt-1">点击重新选择</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 上传按钮 -->
+      <div class="mt-8 text-center">
+        <button id="btn-upload" onclick="uploadFiles()"
+                class="inline-flex items-center gap-2 px-8 py-3 bg-brand-600 hover:bg-brand-700 text-white font-medium rounded-xl transition-all shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+          </svg>
+          解析考生数据
+        </button>
+        <p class="text-xs text-slate-400 mt-3">上传后系统将自动解析考生列表</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════ Step 2: 选择考生 ═══════ -->
+  <section id="section-students" class="hidden fade-in">
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-8">
+      <div class="flex items-center justify-between mb-6">
+        <div>
+          <h2 class="text-xl font-semibold text-slate-800 mb-1">选择考生</h2>
+          <p id="student-count" class="text-sm text-slate-500">共解析到 0 位考生</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="selectAll()" class="px-4 py-2 text-sm font-medium text-brand-600 bg-brand-50 hover:bg-brand-100 rounded-lg transition-colors">
+            全选
+          </button>
+          <button onclick="deselectAll()" class="px-4 py-2 text-sm font-medium text-slate-500 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors">
+            全不选
+          </button>
+          <button onclick="goBackToUpload()" class="px-4 py-2 text-sm font-medium text-slate-500 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors ml-2">
+            返回
+          </button>
+        </div>
+      </div>
+
+      <!-- 搜索框 -->
+      <div class="mb-6">
+        <div class="relative">
+          <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+          </svg>
+          <input type="text" id="search-input" placeholder="搜索考生姓名、学校、专业..." 
+                 class="w-full pl-10 pr-4 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
+                 oninput="filterStudents()">
+        </div>
+      </div>
+
+      <!-- 考生列表 -->
+      <div id="student-list" class="grid gap-3 max-h-[480px] overflow-y-auto pr-1">
+        <!-- 动态生成 -->
+      </div>
+
+      <!-- 已选计数 & 开始按钮 -->
+      <div class="mt-6 pt-6 border-t border-slate-100 flex items-center justify-between">
+        <div class="flex items-center gap-2 text-sm text-slate-500">
+          已选择 <span id="selected-count" class="font-semibold text-brand-600">0</span> 位考生
+        </div>
+        <button id="btn-start" onclick="startAnalysis()" disabled
+                class="inline-flex items-center gap-2 px-8 py-3 bg-brand-600 hover:bg-brand-700 text-white font-medium rounded-xl transition-all shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+          </svg>
+          开始 AI 分析并生成评估表
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════ Step 3: 处理进度 ═══════ -->
+  <section id="section-progress" class="hidden fade-in">
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-8">
+      <div class="text-center mb-8">
+        <h2 class="text-xl font-semibold text-slate-800 mb-2">正在处理</h2>
+        <p id="progress-summary" class="text-sm text-slate-500">AI 正在分析考生调剂信息...</p>
+      </div>
+
+      <!-- 总进度条 -->
+      <div class="mb-8">
+        <div class="flex justify-between text-sm mb-2">
+          <span id="progress-text" class="text-slate-600">准备中...</span>
+          <span id="progress-percent" class="text-brand-600 font-medium">0%</span>
+        </div>
+        <div class="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
+          <div id="progress-bar" class="progress-bar h-full rounded-full" style="width: 0%"></div>
+        </div>
+      </div>
+
+      <!-- 实时日志 -->
+      <div id="progress-log" class="bg-slate-50 rounded-xl p-4 max-h-[320px] overflow-y-auto font-mono text-xs space-y-1">
+        <!-- 动态日志 -->
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════ Step 4: 结果 ═══════ -->
+  <section id="section-results" class="hidden fade-in">
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-8">
+      <div class="flex items-center justify-between mb-8">
+        <div>
+          <h2 class="text-xl font-semibold text-slate-800 mb-1">生成完成</h2>
+          <p id="result-summary" class="text-sm text-slate-500">全部处理完成</p>
+        </div>
+        <div class="flex items-center gap-3">
+          <button onclick="downloadAll()" id="btn-download-all"
+                  class="inline-flex items-center gap-2 px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium rounded-lg transition-colors shadow-sm">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+            </svg>
+            批量下载 ZIP
+          </button>
+          <button onclick="resetAll()"
+                  class="inline-flex items-center gap-2 px-5 py-2.5 text-slate-600 bg-slate-100 hover:bg-slate-200 text-sm font-medium rounded-lg transition-colors">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+            </svg>
+            重新开始
+          </button>
+        </div>
+      </div>
+
+      <!-- 结果列表 -->
+      <div id="result-list" class="grid gap-3">
+        <!-- 动态生成 -->
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<!-- ═══════ 底部 ═══════ -->
+<footer class="text-center py-8 text-xs text-slate-400">
+  戏梦调剂定制班 &middot; 智能调剂规划生成系统 &middot; Powered by AI
+</footer>
+
+
+<!-- ═══════ JavaScript ═══════ -->
+<script>
+// ─── 状态 ──────────────────────────────────────────
+let sessionId = null;
+let taskId = null;
+let allStudents = [];
+let selectedIndices = new Set();
+
+// ─── WebSocket 连接 ────────────────────────────────
+const socket = io();
+socket.on('connect', () => {
+  document.getElementById('connection-status').innerHTML =
+    '<span class="w-2 h-2 rounded-full bg-emerald-400"></span> 已连接';
+});
+socket.on('disconnect', () => {
+  document.getElementById('connection-status').innerHTML =
+    '<span class="w-2 h-2 rounded-full bg-red-400"></span> 已断开';
+});
+
+// ─── 进度事件 ──────────────────────────────────────
+socket.on('progress', (data) => {
+  taskId = data.task_id;
+  const percent = Math.round((data.step / data.total) * 100);
+  document.getElementById('progress-bar').style.width = percent + '%';
+  document.getElementById('progress-percent').textContent = percent + '%';
+  document.getElementById('progress-text').textContent = data.message;
+  
+  const phaseEmoji = { prepare: '📋', ai: '🤖', excel: '📊' };
+  addLog(`${phaseEmoji[data.phase] || ''} ${data.message}`, 'info');
+});
+
+socket.on('student_done', (data) => {
+  const icon = data.success ? '✅' : '❌';
+  const msg = data.success
+    ? `${data.name} - 评估表已生成`
+    : `${data.name} - 失败: ${data.error || '未知错误'}`;
+  addLog(`${icon} ${msg}`, data.success ? 'success' : 'error');
+});
+
+socket.on('task_done', (data) => {
+  addLog(`\n🎉 全部完成！成功 ${data.success} 份，失败 ${data.failed} 份`, 'success');
+  
+  setTimeout(() => {
+    showResults(data);
+  }, 800);
+});
+
+// ─── 文件选择 ──────────────────────────────────────
+function onFileSelected(type, input) {
+  if (!input.files[0]) return;
+  const file = input.files[0];
+  const name = file.name;
+  
+  document.getElementById(`${type}-placeholder`).classList.add('hidden');
+  document.getElementById(`${type}-selected`).classList.remove('hidden');
+  document.getElementById(`${type}-filename`).textContent = name;
+}
+
+// ─── 拖拽上传 ──────────────────────────────────────
+['stats', 'template'].forEach(type => {
+  const zone = document.getElementById(`drop-${type}`);
+  zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('dragover'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+  zone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    zone.classList.remove('dragover');
+    const file = e.dataTransfer.files[0];
+    if (file && (file.name.endsWith('.xlsx') || file.name.endsWith('.xls'))) {
+      const input = document.getElementById(`input-${type}`);
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      input.files = dt.files;
+      onFileSelected(type, input);
+    } else {
+      showToast('请上传 .xlsx 格式的文件', 'error');
+    }
+  });
+});
+
+// ─── 上传文件 ──────────────────────────────────────
+async function uploadFiles() {
+  const statsInput = document.getElementById('input-stats');
+  if (!statsInput.files[0]) {
+    showToast('请先上传统计表文件', 'error');
+    return;
+  }
+
+  const btn = document.getElementById('btn-upload');
+  btn.disabled = true;
+  btn.innerHTML = '<svg class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg> 解析中...';
+
+  const formData = new FormData();
+  formData.append('stats_file', statsInput.files[0]);
+  const templateInput = document.getElementById('input-template');
+  if (templateInput.files[0]) {
+    formData.append('template_file', templateInput.files[0]);
+  }
+
+  try {
+    const resp = await fetch('/api/upload', { method: 'POST', body: formData });
+    const data = await resp.json();
+    
+    if (!data.ok) {
+      showToast(data.error || '上传失败', 'error');
+      btn.disabled = false;
+      btn.innerHTML = '解析考生数据';
+      return;
+    }
+
+    sessionId = data.session_id;
+    allStudents = data.students;
+    showToast(`成功解析 ${data.count} 位考生`, 'success');
+    renderStudents();
+    goToStep(2);
+  } catch (e) {
+    showToast('网络错误，请重试', 'error');
+    btn.disabled = false;
+    btn.innerHTML = '解析考生数据';
+  }
+}
+
+// ─── 渲染考生列表 ──────────────────────────────────
+function renderStudents() {
+  const list = document.getElementById('student-list');
+  document.getElementById('student-count').textContent = `共解析到 ${allStudents.length} 位考生`;
+  
+  list.innerHTML = allStudents.map((s, i) => `
+    <div class="student-card border border-slate-200 rounded-xl p-4 cursor-pointer flex items-start gap-4"
+         id="card-${s.index}" onclick="toggleStudent(${s.index})">
+      <div class="pt-0.5">
+        <input type="checkbox" id="cb-${s.index}" onchange="toggleStudent(${s.index})" onclick="event.stopPropagation()">
+      </div>
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center gap-3 mb-2">
+          <span class="text-base font-semibold text-slate-800">${escapeHtml(s.name)}</span>
+          <span class="px-2 py-0.5 text-xs font-medium rounded-full bg-brand-50 text-brand-600">${escapeHtml(s.education || '未知')}</span>
+          <span class="px-2 py-0.5 text-xs font-medium rounded-full bg-amber-50 text-amber-700">总分 ${escapeHtml(String(s.score || '--'))}</span>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-1 text-xs text-slate-500">
+          <div>🏫 ${escapeHtml(s.undergraduate || '--')}</div>
+          <div>🎯 ${escapeHtml(s.first_choice_school || '--')} · ${escapeHtml(s.first_choice_major || '--')}</div>
+          <div>📝 ${escapeHtml(s.english || '--')} · 政治 ${escapeHtml(s.politics || '--')}</div>
+          <div>📍 调剂意向: ${escapeHtml(s.transfer_type || '--')} · ${escapeHtml(s.transfer_region || '--')}</div>
+        </div>
+      </div>
+      <div class="text-xs text-slate-400 whitespace-nowrap">#${i + 1}</div>
+    </div>
+  `).join('');
+}
+
+function toggleStudent(index) {
+  const card = document.getElementById(`card-${index}`);
+  const cb = document.getElementById(`cb-${index}`);
+  
+  if (selectedIndices.has(index)) {
+    selectedIndices.delete(index);
+    cb.checked = false;
+    card.classList.remove('selected');
+  } else {
+    selectedIndices.add(index);
+    cb.checked = true;
+    card.classList.add('selected');
+  }
+  
+  document.getElementById('selected-count').textContent = selectedIndices.size;
+  document.getElementById('btn-start').disabled = selectedIndices.size === 0;
+}
+
+function selectAll() {
+  const filtered = getFilteredStudents();
+  filtered.forEach(s => {
+    selectedIndices.add(s.index);
+    document.getElementById(`cb-${s.index}`).checked = true;
+    document.getElementById(`card-${s.index}`).classList.add('selected');
+  });
+  document.getElementById('selected-count').textContent = selectedIndices.size;
+  document.getElementById('btn-start').disabled = false;
+}
+
+function deselectAll() {
+  selectedIndices.clear();
+  document.querySelectorAll('input[type="checkbox"]').forEach(cb => { cb.checked = false; });
+  document.querySelectorAll('.student-card').forEach(c => c.classList.remove('selected'));
+  document.getElementById('selected-count').textContent = 0;
+  document.getElementById('btn-start').disabled = true;
+}
+
+function filterStudents() {
+  const keyword = document.getElementById('search-input').value.trim().toLowerCase();
+  const cards = document.querySelectorAll('.student-card');
+  
+  cards.forEach(card => {
+    const text = card.textContent.toLowerCase();
+    card.style.display = text.includes(keyword) ? '' : 'none';
+  });
+}
+
+function getFilteredStudents() {
+  const keyword = document.getElementById('search-input').value.trim().toLowerCase();
+  if (!keyword) return allStudents;
+  return allStudents.filter(s => 
+    JSON.stringify(s).toLowerCase().includes(keyword)
+  );
+}
+
+// ─── 开始分析 ──────────────────────────────────────
+async function startAnalysis() {
+  if (selectedIndices.size === 0) return;
+
+  goToStep(3);
+  document.getElementById('progress-log').innerHTML = '';
+  
+  const btn = document.getElementById('btn-start');
+  btn.disabled = true;
+
+  try {
+    const resp = await fetch('/api/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        session_id: sessionId,
+        indices: Array.from(selectedIndices),
+      }),
+    });
+    const data = await resp.json();
+    
+    if (!data.ok) {
+      showToast(data.error || '启动失败', 'error');
+      goToStep(2);
+    } else {
+      taskId = data.task_id;
+      addLog(`🚀 已启动任务，共 ${selectedIndices.size} 位考生待处理`, 'info');
+    }
+  } catch (e) {
+    showToast('网络错误，请重试', 'error');
+    goToStep(2);
+  }
+}
+
+// ─── 显示结果 ──────────────────────────────────────
+function showResults(taskData) {
+  goToStep(4);
+  
+  const success = taskData.success;
+  const failed = taskData.failed;
+  document.getElementById('result-summary').textContent = 
+    `共生成 ${success} 份评估表${failed > 0 ? `，${failed} 份失败` : ''}`;
+
+  const list = document.getElementById('result-list');
+  list.innerHTML = taskData.results.map((r, i) => `
+    <div class="result-item flex items-center justify-between p-4 rounded-xl border ${r.success ? 'border-emerald-200 bg-emerald-50/50' : 'border-red-200 bg-red-50/50'}"
+         style="animation-delay: ${i * 0.05}s">
+      <div class="flex items-center gap-3">
+        <span class="text-xl">${r.success ? '✅' : '❌'}</span>
+        <div>
+          <p class="font-medium text-slate-800">${escapeHtml(r.name)}</p>
+          <p class="text-xs text-slate-500">${escapeHtml(r.filename)}</p>
+          ${r.error ? `<p class="text-xs text-red-500 mt-1">错误: ${escapeHtml(r.error)}</p>` : ''}
+        </div>
+      </div>
+      ${r.success ? `
+        <a href="/api/download/${taskId}/${encodeURIComponent(r.filename)}" 
+           class="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-brand-600 bg-brand-50 hover:bg-brand-100 rounded-lg transition-colors">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+          </svg>
+          下载
+        </a>
+      ` : ''}
+    </div>
+  `).join('');
+}
+
+// ─── 批量下载 ──────────────────────────────────────
+function downloadAll() {
+  if (!taskId) return;
+  window.location.href = `/api/download_all/${taskId}`;
+}
+
+// ─── 重置 ──────────────────────────────────────────
+function resetAll() {
+  sessionId = null;
+  taskId = null;
+  allStudents = [];
+  selectedIndices.clear();
+  
+  // 重置文件上传
+  document.getElementById('input-stats').value = '';
+  document.getElementById('input-template').value = '';
+  document.getElementById('stats-placeholder').classList.remove('hidden');
+  document.getElementById('stats-selected').classList.add('hidden');
+  document.getElementById('template-placeholder').classList.remove('hidden');
+  document.getElementById('template-selected').classList.add('hidden');
+  
+  const btn = document.getElementById('btn-upload');
+  btn.disabled = false;
+  btn.innerHTML = '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg> 解析考生数据';
+  
+  goToStep(1);
+}
+
+function goBackToUpload() {
+  goToStep(1);
+}
+
+// ─── 步骤导航 ──────────────────────────────────────
+function goToStep(step) {
+  // 隐藏所有 section
+  ['upload', 'students', 'progress', 'results'].forEach(s => {
+    document.getElementById(`section-${s}`).classList.add('hidden');
+  });
+  
+  // 显示目标 section
+  const sectionMap = { 1: 'upload', 2: 'students', 3: 'progress', 4: 'results' };
+  const target = document.getElementById(`section-${sectionMap[step]}`);
+  target.classList.remove('hidden');
+  // 重新触发动画
+  target.classList.remove('fade-in');
+  void target.offsetWidth;
+  target.classList.add('fade-in');
+
+  // 更新步骤指示器
+  for (let i = 1; i <= 3; i++) {
+    const badge = document.getElementById(`step-badge-${i}`);
+    const text = document.getElementById(`step-text-${i}`);
+    
+    if (i < step) {
+      badge.className = 'w-8 h-8 rounded-full bg-emerald-500 text-white flex items-center justify-center text-sm font-semibold';
+      badge.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>';
+      text.className = 'text-sm font-medium text-emerald-600';
+    } else if (i === step) {
+      badge.className = 'w-8 h-8 rounded-full bg-brand-600 text-white flex items-center justify-center text-sm font-semibold ring-4 ring-brand-100';
+      badge.textContent = i;
+      text.className = 'text-sm font-medium text-brand-700';
+    } else {
+      badge.className = 'w-8 h-8 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center text-sm font-semibold';
+      badge.textContent = i;
+      text.className = 'text-sm font-medium text-slate-400';
+    }
+    
+    if (i < 3) {
+      const line = document.getElementById(`step-line-${i}`);
+      line.style.backgroundColor = i < step ? '#10b981' : '#e2e8f0';
+    }
+  }
+}
+
+// ─── 日志 ──────────────────────────────────────────
+function addLog(message, type = 'info') {
+  const log = document.getElementById('progress-log');
+  const colors = { info: 'text-slate-600', success: 'text-emerald-600', error: 'text-red-500' };
+  const time = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+  const line = document.createElement('div');
+  line.className = colors[type] || 'text-slate-600';
+  line.innerHTML = `<span class="text-slate-400">[${time}]</span> ${escapeHtml(message)}`;
+  log.appendChild(line);
+  log.scrollTop = log.scrollHeight;
+}
+
+// ─── Toast 通知 ────────────────────────────────────
+function showToast(message, type = 'info') {
+  const container = document.getElementById('toast-container');
+  const colors = {
+    info: 'bg-brand-600 text-white',
+    success: 'bg-emerald-500 text-white',
+    error: 'bg-red-500 text-white',
+  };
+  const toast = document.createElement('div');
+  toast.className = `toast px-5 py-3 rounded-xl shadow-lg ${colors[type]} text-sm font-medium`;
+  toast.textContent = message;
+  container.appendChild(toast);
+  setTimeout(() => toast.remove(), 4000);
+}
+
+// ─── 工具函数 ──────────────────────────────────────
+function escapeHtml(str) {
+  if (!str) return '';
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+</script>
+</body>
+</html>

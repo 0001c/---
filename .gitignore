@@ -1,0 +1,15 @@
+/.dockerignore
+/.venv
+/.workbuddy
+/2.xlsx
+/docker-compose.yml
+/docker-data
+/Dockerfile
+/gui.py
+/output
+/start.bat
+/test.py
+/ximeng-tiaoji-web.tar
+/__pycache__
+/模板.xlsx
+/统计表.xlsx
