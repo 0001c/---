@@ -1,15 +1,49 @@
-/.dockerignore
-/.venv
-/.workbuddy
-/2.xlsx
-/docker-compose.yml
-/docker-data
-/Dockerfile
-/gui.py
-/output
-/start.bat
-/test.py
-/ximeng-tiaoji-web.tar
-/__pycache__
-/模板.xlsx
-/统计表.xlsx
+# ─── Python ────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+.Python
+
+# ─── 虚拟环境 ──────────────────────────────────────
+.venv/
+venv/
+env/
+
+# ─── IDE / 编辑器 ──────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ─── WorkBuddy（AI 辅助工具工作目录） ──────────────
+.workbuddy/
+
+# ═══ 用户数据（含敏感信息，禁止提交） ══════════════
+# 问卷导出的原始统计表（包含姓名、手机号等个人信息）
+统计表.xlsx
+# Docker 镜像导出包（体积大且可重新构建）
+ximeng-tiaoji-web.tar
+
+# ═══ 运行时生成的文件 ═════════════════════════════
+# Excel 输出目录（运行后自动生成）
+output/
+# Web 运行时上传和输出
+web/uploads/
+web/output/
+# Docker 数据持久化目录
+docker-data/
+
+# ═══ 弃用的文件 ═══════════════════════════════════
+# GUI 版已弃用（存在冗余调用 Bug）
+gui.py
+# API 连通性测试脚本（仅开发者本地测试用）
+test.py
+# 未使用的历史文件
+2.xlsx

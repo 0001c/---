@@ -1,5 +1,5 @@
 """
-戏梦调剂定制班 - Web 服务端
+xx调剂定制班 - Web 服务端
 Flask + SocketIO 实现文件上传、数据解析、AI 分析、实时进度推送、Excel 生成与下载
 """
 
@@ -278,7 +278,7 @@ def start_analysis():
                 'message': f'正在生成 {name} 的评估表...',
             })
 
-            filename = f"{student_name}_戏梦调剂定制班1v1个人评估表.xlsx"
+            filename = f"{student_name}_xx调剂定制班1v1个人评估表.xlsx"
             output_path = os.path.join(task_output_dir, filename)
             success, error = generate_excel(data_analysis, template_path, output_path)
 
@@ -370,7 +370,7 @@ def download_all(task_id):
 
 if __name__ == '__main__':
     print("=" * 50)
-    print("  戏梦调剂定制班 - Web 服务")
+    print("  xx调剂定制班 - Web 服务")
     print("  访问 http://localhost:5000")
     print("=" * 50)
     socketio.run(app, host='0.0.0.0', port=5000, debug=True, allow_unsafe_werkzeug=True)

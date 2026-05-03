@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# WorkBuddy 工作目录
+.workbuddy/
+
+# Web 构建产物和运行时文件（Docker 内自动创建）
+web/uploads/
+web/output/
+web/__pycache__/
+
+# 其他不需要打包的文件
+output/
+*.log
+*.bat
+.git/
+.gitignore
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# 非必要文件
+2.xlsx
+test.py
+gui.py

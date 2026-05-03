@@ -22,7 +22,7 @@ def main_excel(data_analysis):
         if not os.path.exists(template_file):
             raise FileNotFoundError(f"模板文件 {template_file} 不存在")
         
-        output_file = f".\\output\\{data_analysis[0]}_戏梦调剂定制班1v1个人评估表.xlsx"
+        output_file = f".\\output\\{data_analysis[0]}_xx调剂定制班1v1个人评估表.xlsx"
         shutil.copy2(template_file, output_file)
         
         wb = load_workbook(output_file)
